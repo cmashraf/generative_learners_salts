@@ -32,9 +32,6 @@ from rdkit.Chem.Fingerprints import FingerprintMols
 from rdkit import DataStructs
 from rdkit.Chem import Draw
 
-def my_colors():
-    tab = cycle(colors.TABLEAU_COLORS)
-    return tab
 import copy
 from keras import backend as K
 from keras import objectives
@@ -44,6 +41,12 @@ from keras.layers.core import Dense, Activation, Flatten, RepeatVector
 from keras.layers.wrappers import TimeDistributed
 from keras.layers.recurrent import GRU
 from keras.layers.convolutional import Convolution1D
+
+
+def my_colors():
+    tab = cycle(colors.TABLEAU_COLORS)
+    return tab
+
 
 class MoleculeVAE():
 
@@ -257,3 +260,14 @@ def generate_structures(vae, smi, char_to_index, limit=1e4, write=False):
             df.columns = ['smiles', 'temperature', 'iteration']
             pd.DataFrame.to_csv(df, path_or_buf='{}.csv'.format(write), index=False)
     return df
+
+
+def one_hot(smi, char_to_index):
+    test_smi = smi
+    smile_max_length=51
+    char_set = set(char_to_index.keys())
+    test_smi = pad_smiles(test_smi, smile_max_length)
+    Z = np.zeros((1, smile_max_length, len(list(char_set))), dtype=np.bool)
+    for t, char in enumerate(test_smi):
+        Z[0, t, char_to_index[char]] = 1
+    return Z
