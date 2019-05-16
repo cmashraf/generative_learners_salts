@@ -262,9 +262,8 @@ def generate_structures(vae, smi, char_to_index, limit=1e4, write=False):
     return df
 
 
-def one_hot(smi, char_to_index):
+def one_hot(smi, char_to_index, smile_max_length=51):
     test_smi = smi
-    smile_max_length=51
     char_set = set(char_to_index.keys())
     test_smi = pad_smiles(test_smi, smile_max_length)
     Z = np.zeros((1, smile_max_length, len(list(char_set))), dtype=np.bool)
