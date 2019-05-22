@@ -226,6 +226,22 @@ def decode_smiles(vae, smi, char_to_index, temp=0.5, smile_max_length=51):
     return string
 
 
+def decode_latent(vae, z, char_to_index, temp=0.5, smile_max_length=51):
+    """
+    vae: variational autoencoder to encode/decode input
+    z: encoded smiles str
+    temp: temperature at which to perform sampling
+    """
+    char_list = list(char_to_index.keys())
+    index_to_char = dict((i, c) for i, c in enumerate(char_list))
+    string = ""
+    for i in vae.decoder.predict(z):
+        for j in i:
+            index = sample(j, temperature=temp)
+            string += index_to_char[index]
+    return string
+
+
 def generate_structures(vae, smi, char_to_index, limit=1e4, write=False):
     rdkit_mols = []
     temps = []
