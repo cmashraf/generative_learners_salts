@@ -1,8 +1,8 @@
-#plot
-import matplotlib.pylab as plt
-import seaborn as sns; sns.set()
-from matplotlib import colors
-from itertools import cycle
+##plot
+#import matplotlib.pylab as plt
+#import seaborn as sns; sns.set()
+#from matplotlib import colors
+#from itertools import cycle
 
 #data
 import pandas as pd
@@ -26,11 +26,11 @@ from keras.layers.recurrent import GRU
 from keras.layers.convolutional import Convolution1D
 
 #chem
-import salty
-from rdkit import Chem
-from rdkit.Chem.Fingerprints import FingerprintMols
-from rdkit import DataStructs
-from rdkit.Chem import Draw
+#import salty
+#from rdkit import Chem
+#from rdkit.Chem.Fingerprints import FingerprintMols
+#from rdkit import DataStructs
+#from rdkit.Chem import Draw
 
 
 class MoleculeVAE():
@@ -42,25 +42,45 @@ class MoleculeVAE():
                max_length = 105,
                latent_rep_size = 292,
                weights_file = None,
-               qspr = False):
+               qspr = False,
+               conv_layers=3,
+               gru_layers=3,
+               conv_epsilon_std=0.01,
+               conv_filters=3, 
+               conv_kernel_size=9,
+               gru_output_units=501):
         charset_length = len(charset)
     
-        x = Input(shape=(max_length, charset_length))
-        _, z = self._buildEncoder(x, latent_rep_size, max_length)
+        x = Input(shape=(max_length, charset_length), name='one_hot_input_encoder')
+        _, z = self._buildEncoder(x, 
+                                  latent_rep_size, 
+                                  max_length,
+                                  conv_epsilon_std,
+                                  conv_layers, 
+                                  conv_filters, 
+                                  conv_kernel_size)
         self.encoder = Model(x, z)
-        encoded_input = Input(shape=(latent_rep_size,))
+        encoded_input = Input(shape=(latent_rep_size,), name='encoded_input')
         self.decoder = Model(
             encoded_input,
             self._buildDecoder(
                 encoded_input,
                 latent_rep_size,
                 max_length,
-                charset_length
+                charset_length,
+                gru_layers,
+                gru_output_units
             )
         )
 
-        x1 = Input(shape=(max_length, charset_length))
-        vae_loss, z1 = self._buildEncoder(x1, latent_rep_size, max_length)
+        x1 = Input(shape=(max_length, charset_length), name='one_hot_input_auto')
+        vae_loss, z1 = self._buildEncoder(x1, 
+                                          latent_rep_size, 
+                                          max_length,
+                                          conv_epsilon_std,
+                                          conv_layers, 
+                                          conv_filters,
+                                          conv_kernel_size)
         
         if qspr:
             self.autoencoder = Model(
@@ -108,10 +128,13 @@ class MoleculeVAE():
             self.autoencoder.compile(optimizer = 'Adam',
                                      loss = {'decoded_mean': vae_loss},
                                      metrics = ['accuracy'])
-    def _buildEncoder(self, x, latent_rep_size, max_length, epsilon_std = 0.01):
+    def _buildEncoder(self, x, latent_rep_size, max_length, epsilon_std = 0.01, conv_layers=3, 
+                      conv_filters=9, conv_kernel_size=9):
         h = Convolution1D(9, 9, activation = 'relu', name='conv_1')(x)
-        h = Convolution1D(9, 9, activation = 'relu', name='conv_2')(h)
-        h = Convolution1D(10, 11, activation = 'relu', name='conv_3')(h)
+        for convolution in range(conv_layers-2):
+            h = Convolution1D(conv_filters, conv_kernel_size, activation = 'relu', name='conv_{}'.
+                              format(convolution+2))(h)
+        h = Convolution1D(10, 11, activation = 'relu', name='conv_{}'.format(conv_layers))(h)
         h = Flatten(name='flatten_1')(h)
         h = Dense(435, activation = 'relu', name='dense_1')(h)
 
@@ -133,13 +156,14 @@ class MoleculeVAE():
 
         return (vae_loss, Lambda(sampling, output_shape=(latent_rep_size,), name='lambda')([z_mean, z_log_var]))
 
-    def _buildDecoderQSPR(self, z, latent_rep_size, max_length, charset_length):
+    def _buildDecoderQSPR(self, z, latent_rep_size, max_length, charset_length, gru_layers=3):
 
         h = Dense(latent_rep_size, name='latent_input', activation = 'relu')(z)
         h = RepeatVector(max_length, name='repeat_vector')(h)
         h = GRU(501, return_sequences = True, name='gru_1')(h)
-        h = GRU(501, return_sequences = True, name='gru_2')(h)
-        h = GRU(501, return_sequences = True, name='gru_3')(h)
+        for gru in range(gru_layers-2):
+            h = GRU(501, return_sequences = True, name='gru_{}'.format(gru+2))(h)
+        h = GRU(501, return_sequences = True, name='gru_{}'.format(gru_layers))(h)
         smiles_decoded = TimeDistributed(Dense(charset_length, activation='softmax'), name='decoded_mean')(h)
 
         h = Dense(latent_rep_size, name='qspr_input', activation='relu')(z)
@@ -149,13 +173,15 @@ class MoleculeVAE():
 
         return smiles_decoded, smiles_qspr
 
-    def _buildDecoder(self, z, latent_rep_size, max_length, charset_length):
+    def _buildDecoder(self, z, latent_rep_size, max_length, 
+                      charset_length, gru_layers=3, gru_output_units=501):
 
         h = Dense(latent_rep_size, name='latent_input', activation = 'relu')(z)
         h = RepeatVector(max_length, name='repeat_vector')(h)
         h = GRU(501, return_sequences = True, name='gru_1')(h)
-        h = GRU(501, return_sequences = True, name='gru_2')(h)
-        h = GRU(501, return_sequences = True, name='gru_3')(h)
+        for gru in range(gru_layers-2):
+            h = GRU(gru_output_units, return_sequences = True, name='gru_{}'.format(gru+2))(h)
+        h = GRU(501, return_sequences = True, name='gru_{}'.format(gru_layers))(h)
         smiles_decoded = TimeDistributed(Dense(charset_length, activation='softmax'), name='decoded_mean')(h)
 
         return smiles_decoded
