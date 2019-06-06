@@ -1,8 +1,8 @@
-#plot
-import matplotlib.pylab as plt
-import seaborn as sns; sns.set()
-from matplotlib import colors
-from itertools import cycle
+##plot
+#import matplotlib.pylab as plt
+#import seaborn as sns; sns.set()
+#from matplotlib import colors
+#from itertools import cycle
 
 #data
 import pandas as pd
@@ -26,11 +26,11 @@ from keras.layers.recurrent import GRU
 from keras.layers.convolutional import Convolution1D
 
 #chem
-import salty
-from rdkit import Chem
-from rdkit.Chem.Fingerprints import FingerprintMols
-from rdkit import DataStructs
-from rdkit.Chem import Draw
+#import salty
+#from rdkit import Chem
+#from rdkit.Chem.Fingerprints import FingerprintMols
+#from rdkit import DataStructs
+#from rdkit.Chem import Draw
 
 
 class MoleculeVAE():
