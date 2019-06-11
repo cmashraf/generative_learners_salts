@@ -1,11 +1,4 @@
 import numpy as np
-import keras
-from keras import objectives
-from keras.callbacks import EarlyStopping
-from keras.models import Sequential, Model
-from keras.layers import Dense, Dropout, Input, Multiply, Add
-from keras.optimizers import Adam, Nadam
-
 from numpy import array
 from numpy import argmax
 from random import shuffle
@@ -13,6 +6,12 @@ import pandas as pd
 import random
 
 #Keras build
+import keras
+from keras import objectives
+from keras.callbacks import EarlyStopping
+from keras.models import Sequential, Model
+from keras.layers import Dense, Dropout, Input, Multiply, Add
+from keras.optimizers import Adam, Nadam
 from keras import backend as K
 from keras.objectives import binary_crossentropy #objs or losses
 from keras.models import Model
@@ -27,55 +26,177 @@ cations = pd.read_csv('../data/cations.csv')
 cations = cations['smiles_string']
 salts = pd.read_csv('../data/salts.csv')
 salts = salts['smiles_string']
-categories = pd.read_csv('../data/categories.csv')
-categories = categories['category']
-coldic = pd.read_csv('../data/coldic.csv')
-coldic = coldic.to_dict(orient='records')[0]
-salt_coldic = pd.read_csv('../data/salt_coldic.csv')
-salt_coldic = salt_coldic.to_dict(orient='records')[0]
-salt_categories = pd.read_csv('../data/salt_categories.csv')
-salt_categories = salt_categories['category']
-density_coldic = pd.read_csv('../data/density_coldic.csv')
-density_coldic = density_coldic.to_dict(orient='records')[0]
-density_categories = pd.read_csv('../data/density_categories.csv')
-density_categories = density_categories['category']
+anions = pd.read_csv('../data/anions.csv')
+anions = anions['smiles']
 
 #supporting functions
 import sys
 sys.path.insert(0, '../')
 from scripts import *
 
-#training array info
-smile_max_length = 51
-import json
+
+#setup model
 f = open("../data/salt_char_to_index.json","r")
 char_to_index = json.loads(f.read())
 char_set = set(char_to_index.keys())
 char_list = list(char_to_index.keys())
 chars_in_dict = len(char_list)
+properties = ['viscosity', 'cpt', 'melting_point']
 
-#training data
-chemvae = MoleculeVAE()
-chemvae.create(char_set, max_length=smile_max_length)
-df = pd.read_csv('../data/GDB/GDB17.1000000', names=['smiles'])
-data_size = 100000
+# epochs = 1
+# for prop in properties:
+#     gen1vae = MoleculeVAE()
+#     gen1vae.create(char_set, qspr=True, mol_inputs=2, weights_file='../models/gen1_2mol_1mil_GDB17_mix_pure_5.h5')
+#     gen2vae = TwoMoleculeOneLatentVAE()
+#     gen2vae.create(char_set, qspr=True, weights_file='../models/gen2_2mol_1mil_GDB17_mix_pure_5.h5')
+#     gen3vae = TwoMoleculeVAE()
+#     gen3vae.create(char_set, char_set, qspr=True, weights_file='../models/gen3_2mol_1mil_GDB17_mix_pure_5.h5')
 
-histories = []
-for p in range(3):
-    values = df['smiles'][data_size*p:data_size*(p+1)]
-    padded_smiles =  [pad_smiles(i, smile_max_length) for i in values if pad_smiles(i, smile_max_length)]
-    X_train = np.zeros((data_size, smile_max_length, chars_in_dict), dtype=np.float32)
+#     x_train_cat = np.load('../data/{}_x_train_cat.npy'.format(prop))
+#     x_train_ani = np.load('../data/{}_x_train_ani.npy'.format(prop))
+#     x_test_cat = np.load('../data/{}_x_test_cat.npy'.format(prop))
+#     x_test_ani = np.load('../data/{}_x_test_ani.npy'.format(prop))
+#     y_train = np.load('../data/{}_y_train.npy'.format(prop))
+#     y_test = np.load('../data/{}_y_test.npy'.format(prop))
     
-    # for each i, randomly select whether to sample from GDB or cations (padded_smiles_2)
-    for i, smile in enumerate(padded_smiles):
-#    for i in range(data_size):
-#         linearly_scaled_prob = random.random() < 0.5#i/data_size
-#         if linearly_scaled_prob:
-#             smile = random.choice(cations)
-#        smile = random.choice(cations)
-        for j, char in enumerate(smile):
-            X_train[i, j, char_to_index[char]] = 1
+#     history = gen1vae.autoencoder.fit([x_train_cat, x_train_ani], [x_train_cat, x_train_ani, y_train],
+#                           shuffle=False,
+#                           validation_data=([x_test_cat, x_test_ani], [x_test_cat, x_test_ani, y_test]),
+#                           epochs=epochs)
+#     gen1vae.save('../models/gen1vae_{}_{}.h5'.format(prop,epochs))
+#     with open('../models/history_gen1vae_{}_{}.json'.format(prop,epochs), 'w') as f:
+#         json.dump(history.history, f)
+        
+#     history = gen2vae.autoencoder.fit([x_train_cat, x_train_ani], [x_train_cat, x_train_ani, y_train],
+#                           shuffle=False,
+#                           validation_data=([x_test_cat, x_test_ani], [x_test_cat, x_test_ani, y_test]),
+#                           epochs=epochs)
+#     gen2vae.save('../models/gen2vae_{}_{}.h5'.format(prop,epochs))
+#     with open('../models/history_gen2vae_{}_{}.json'.format(prop,epochs), 'w') as f:
+#         json.dump(history.history, f)
+        
+#     history = gen3vae.autoencoder.fit([x_train_cat, x_train_ani], [x_train_cat, x_train_ani, y_train],
+#                           shuffle=False,
+#                           validation_data=([x_test_cat, x_test_ani], [x_test_cat, x_test_ani, y_test]),
+#                           epochs=epochs)
+#     gen3vae.save('../models/gen3vae_{}_{}.h5'.format(prop,epochs))
+#     with open('../models/history_gen3vae_{}_{}.json'.format(prop,epochs), 'w') as f:
+#         json.dump(history.history, f)
 
-    history = chemvae.autoencoder.fit(X_train, X_train, shuffle = False)
-    histories.append(history.history)
-   # chemvae.save('../models/1mil_GDB17_62smi_{}.h5'.format(p+1))
+#epochs = 10
+#for prop in properties:
+#    gen1vae = MoleculeVAE()
+#    gen1vae.create(char_set, qspr=True, mol_inputs=2, weights_file='../models/gen1_2mol_1mil_GDB17_mix_pure_5.h5')
+#    gen2vae = TwoMoleculeOneLatentVAE()
+#    gen2vae.create(char_set, qspr=True, weights_file='../models/gen2_2mol_1mil_GDB17_mix_pure_5.h5')
+#    gen3vae = TwoMoleculeVAE()
+#    gen3vae.create(char_set, char_set, qspr=True, weights_file='../models/gen3_2mol_1mil_GDB17_mix_pure_5.h5')
+#    x_train_cat = np.load('../data/{}_x_train_cat.npy'.format(prop))
+#    x_train_ani = np.load('../data/{}_x_train_ani.npy'.format(prop))
+#    x_test_cat = np.load('../data/{}_x_test_cat.npy'.format(prop))
+#    x_test_ani = np.load('../data/{}_x_test_ani.npy'.format(prop))
+#    y_train = np.load('../data/{}_y_train.npy'.format(prop))
+#    y_test = np.load('../data/{}_y_test.npy'.format(prop))
+#    
+#    history = gen1vae.autoencoder.fit([x_train_cat, x_train_ani], [x_train_cat, x_train_ani, y_train],
+#                          shuffle=False,
+#                          validation_data=([x_test_cat, x_test_ani], [x_test_cat, x_test_ani, y_test]),
+#                          epochs=epochs)
+#    gen1vae.save('../models/gen1vae_{}_{}.h5'.format(prop,epochs))
+#    with open('../models/history_gen1vae_{}_{}.json'.format(prop,epochs), 'w') as f:
+#        json.dump(history.history, f)
+#        
+#    history = gen2vae.autoencoder.fit([x_train_cat, x_train_ani], [x_train_cat, x_train_ani, y_train],
+#                          shuffle=False,
+#                          validation_data=([x_test_cat, x_test_ani], [x_test_cat, x_test_ani, y_test]),
+#                          epochs=epochs)
+#    gen2vae.save('../models/gen2vae_{}_{}.h5'.format(prop,epochs))
+#    with open('../models/history_gen2vae_{}_{}.json'.format(prop,epochs), 'w') as f:
+#        json.dump(history.history, f)
+#        
+#    history = gen3vae.autoencoder.fit([x_train_cat, x_train_ani], [x_train_cat, x_train_ani, y_train],
+#                          shuffle=False,
+#                          validation_data=([x_test_cat, x_test_ani], [x_test_cat, x_test_ani, y_test]),
+#                          epochs=epochs)
+#    gen3vae.save('../models/gen3vae_{}_{}.h5'.format(prop,epochs))
+#    with open('../models/history_gen3vae_{}_{}.json'.format(prop,epochs), 'w') as f:
+#        json.dump(history.history, f)
+        
+epochs = 30
+for prop in properties:
+    #gen1vae = MoleculeVAE()
+    #gen1vae.create(char_set, qspr=True, mol_inputs=2, weights_file='../models/gen1_2mol_1mil_GDB17_mix_pure_5.h5')
+    #gen2vae = TwoMoleculeOneLatentVAE()
+    #gen2vae.create(char_set, qspr=True, weights_file='../models/gen2_2mol_1mil_GDB17_mix_pure_5.h5')
+    gen3vae = TwoMoleculeVAE()
+    gen3vae.create(char_set, char_set, qspr=True, weights_file='../models/gen3_2mol_1mil_GDB17_mix_pure_5.h5')
+    x_train_cat = np.load('../data/{}_x_train_cat.npy'.format(prop))
+    x_train_ani = np.load('../data/{}_x_train_ani.npy'.format(prop))
+    x_test_cat = np.load('../data/{}_x_test_cat.npy'.format(prop))
+    x_test_ani = np.load('../data/{}_x_test_ani.npy'.format(prop))
+    y_train = np.load('../data/{}_y_train.npy'.format(prop))
+    y_test = np.load('../data/{}_y_test.npy'.format(prop))
+    
+    #history = gen1vae.autoencoder.fit([x_train_cat, x_train_ani], [x_train_cat, x_train_ani, y_train],
+    #                      shuffle=False,
+    #                      validation_data=([x_test_cat, x_test_ani], [x_test_cat, x_test_ani, y_test]),
+    #                      epochs=epochs)
+    #gen1vae.save('../models/gen1vae_{}_{}.h5'.format(prop,epochs))
+    #with open('../models/history_gen1vae_{}_{}.json'.format(prop,epochs), 'w') as f:
+    #    json.dump(history.history, f)
+    #    
+    #history = gen2vae.autoencoder.fit([x_train_cat, x_train_ani], [x_train_cat, x_train_ani, y_train],
+    #                      shuffle=False,
+    #                      validation_data=([x_test_cat, x_test_ani], [x_test_cat, x_test_ani, y_test]),
+    #                      epochs=epochs)
+    #gen2vae.save('../models/gen2vae_{}_{}.h5'.format(prop,epochs))
+    #with open('../models/history_gen2vae_{}_{}.json'.format(prop,epochs), 'w') as f:
+    #    json.dump(history.history, f)
+        
+    history = gen3vae.autoencoder.fit([x_train_cat, x_train_ani], [x_train_cat, x_train_ani, y_train],
+                          shuffle=False,
+                          validation_data=([x_test_cat, x_test_ani], [x_test_cat, x_test_ani, y_test]),
+                          epochs=epochs)
+    gen3vae.save('../models/gen3vae_{}_{}.h5'.format(prop,epochs))
+    with open('../models/history_gen3vae_{}_{}.json'.format(prop,epochs), 'w') as f:
+        json.dump(history.history, f)
+
+properties = ['density', 'viscosity', 'cpt', 'melting_point']   
+epochs = 100
+for prop in properties:
+#    gen1vae = MoleculeVAE()
+#    gen1vae.create(char_set, qspr=True, mol_inputs=2, weights_file='../models/gen1_2mol_1mil_GDB17_mix_pure_5.h5')
+#    gen2vae = TwoMoleculeOneLatentVAE()
+#    gen2vae.create(char_set, qspr=True, weights_file='../models/gen2_2mol_1mil_GDB17_mix_pure_5.h5')
+    gen3vae = TwoMoleculeVAE()
+    gen3vae.create(char_set, char_set, qspr=True, weights_file='../models/gen3_2mol_1mil_GDB17_mix_pure_5.h5')
+    x_train_cat = np.load('../data/{}_x_train_cat.npy'.format(prop))
+    x_train_ani = np.load('../data/{}_x_train_ani.npy'.format(prop))
+    x_test_cat = np.load('../data/{}_x_test_cat.npy'.format(prop))
+    x_test_ani = np.load('../data/{}_x_test_ani.npy'.format(prop))
+    y_train = np.load('../data/{}_y_train.npy'.format(prop))
+    y_test = np.load('../data/{}_y_test.npy'.format(prop))
+    
+#    history = gen1vae.autoencoder.fit([x_train_cat, x_train_ani], [x_train_cat, x_train_ani, y_train],
+#                          shuffle=False,
+#                          validation_data=([x_test_cat, x_test_ani], [x_test_cat, x_test_ani, y_test]),
+#                          epochs=epochs)
+#    gen1vae.save('../models/gen1vae_{}_{}.h5'.format(prop,epochs))
+#    with open('../models/history_gen1vae_{}_{}.json'.format(prop,epochs), 'w') as f:
+#        json.dump(history.history, f)
+#        
+#    history = gen2vae.autoencoder.fit([x_train_cat, x_train_ani], [x_train_cat, x_train_ani, y_train],
+#                          shuffle=False,
+#                          validation_data=([x_test_cat, x_test_ani], [x_test_cat, x_test_ani, y_test]),
+#                          epochs=epochs)
+#    gen2vae.save('../models/gen2vae_{}_{}.h5'.format(prop,epochs))
+#    with open('../models/history_gen2vae_{}_{}.json'.format(prop,epochs), 'w') as f:
+#        json.dump(history.history, f)
+        
+    history = gen3vae.autoencoder.fit([x_train_cat, x_train_ani], [x_train_cat, x_train_ani, y_train],
+                          shuffle=False,
+                          validation_data=([x_test_cat, x_test_ani], [x_test_cat, x_test_ani, y_test]),
+                          epochs=epochs)
+    gen3vae.save('../models/gen3vae_{}_{}.h5'.format(prop,epochs))
+    with open('../models/history_gen3vae_{}_{}.json'.format(prop,epochs), 'w') as f:
+        json.dump(history.history, f)
