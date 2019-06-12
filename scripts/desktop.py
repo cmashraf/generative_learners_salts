@@ -41,7 +41,7 @@ char_to_index = json.loads(f.read())
 char_set = set(char_to_index.keys())
 char_list = list(char_to_index.keys())
 chars_in_dict = len(char_list)
-properties = ['viscosity', 'cpt', 'melting_point']
+properties = ['thermal_conductivity']
 
 # epochs = 1
 # for prop in properties:
@@ -83,21 +83,21 @@ properties = ['viscosity', 'cpt', 'melting_point']
 #     with open('../models/history_gen3vae_{}_{}.json'.format(prop,epochs), 'w') as f:
 #         json.dump(history.history, f)
 
-#epochs = 10
-#for prop in properties:
+epochs = 10
+for prop in properties:
 #    gen1vae = MoleculeVAE()
 #    gen1vae.create(char_set, qspr=True, mol_inputs=2, weights_file='../models/gen1_2mol_1mil_GDB17_mix_pure_5.h5')
 #    gen2vae = TwoMoleculeOneLatentVAE()
 #    gen2vae.create(char_set, qspr=True, weights_file='../models/gen2_2mol_1mil_GDB17_mix_pure_5.h5')
-#    gen3vae = TwoMoleculeVAE()
-#    gen3vae.create(char_set, char_set, qspr=True, weights_file='../models/gen3_2mol_1mil_GDB17_mix_pure_5.h5')
-#    x_train_cat = np.load('../data/{}_x_train_cat.npy'.format(prop))
-#    x_train_ani = np.load('../data/{}_x_train_ani.npy'.format(prop))
-#    x_test_cat = np.load('../data/{}_x_test_cat.npy'.format(prop))
-#    x_test_ani = np.load('../data/{}_x_test_ani.npy'.format(prop))
-#    y_train = np.load('../data/{}_y_train.npy'.format(prop))
-#    y_test = np.load('../data/{}_y_test.npy'.format(prop))
-#    
+   gen3vae = TwoMoleculeVAE()
+   gen3vae.create(char_set, char_set, qspr=True, weights_file='../models/gen3_2mol_1mil_GDB17_mix_pure_5.h5')
+   x_train_cat = np.load('../data/{}_x_train_cat.npy'.format(prop))
+   x_train_ani = np.load('../data/{}_x_train_ani.npy'.format(prop))
+   x_test_cat = np.load('../data/{}_x_test_cat.npy'.format(prop))
+   x_test_ani = np.load('../data/{}_x_test_ani.npy'.format(prop))
+   y_train = np.load('../data/{}_y_train.npy'.format(prop))
+   y_test = np.load('../data/{}_y_test.npy'.format(prop))
+   
 #    history = gen1vae.autoencoder.fit([x_train_cat, x_train_ani], [x_train_cat, x_train_ani, y_train],
 #                          shuffle=False,
 #                          validation_data=([x_test_cat, x_test_ani], [x_test_cat, x_test_ani, y_test]),
@@ -105,7 +105,7 @@ properties = ['viscosity', 'cpt', 'melting_point']
 #    gen1vae.save('../models/gen1vae_{}_{}.h5'.format(prop,epochs))
 #    with open('../models/history_gen1vae_{}_{}.json'.format(prop,epochs), 'w') as f:
 #        json.dump(history.history, f)
-#        
+       
 #    history = gen2vae.autoencoder.fit([x_train_cat, x_train_ani], [x_train_cat, x_train_ani, y_train],
 #                          shuffle=False,
 #                          validation_data=([x_test_cat, x_test_ani], [x_test_cat, x_test_ani, y_test]),
@@ -113,14 +113,14 @@ properties = ['viscosity', 'cpt', 'melting_point']
 #    gen2vae.save('../models/gen2vae_{}_{}.h5'.format(prop,epochs))
 #    with open('../models/history_gen2vae_{}_{}.json'.format(prop,epochs), 'w') as f:
 #        json.dump(history.history, f)
-#        
-#    history = gen3vae.autoencoder.fit([x_train_cat, x_train_ani], [x_train_cat, x_train_ani, y_train],
-#                          shuffle=False,
-#                          validation_data=([x_test_cat, x_test_ani], [x_test_cat, x_test_ani, y_test]),
-#                          epochs=epochs)
-#    gen3vae.save('../models/gen3vae_{}_{}.h5'.format(prop,epochs))
-#    with open('../models/history_gen3vae_{}_{}.json'.format(prop,epochs), 'w') as f:
-#        json.dump(history.history, f)
+       
+   history = gen3vae.autoencoder.fit([x_train_cat, x_train_ani], [x_train_cat, x_train_ani, y_train],
+                         shuffle=False,
+                         validation_data=([x_test_cat, x_test_ani], [x_test_cat, x_test_ani, y_test]),
+                         epochs=epochs)
+   gen3vae.save('../models/gen3vae_{}_{}.h5'.format(prop,epochs))
+   with open('../models/history_gen3vae_{}_{}.json'.format(prop,epochs), 'w') as f:
+       json.dump(history.history, f)
         
 epochs = 30
 for prop in properties:
@@ -161,7 +161,6 @@ for prop in properties:
     with open('../models/history_gen3vae_{}_{}.json'.format(prop,epochs), 'w') as f:
         json.dump(history.history, f)
 
-properties = ['density', 'viscosity', 'cpt', 'melting_point']   
 epochs = 100
 for prop in properties:
 #    gen1vae = MoleculeVAE()
