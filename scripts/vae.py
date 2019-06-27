@@ -7,6 +7,7 @@ import random
 import copy
 import os
 from os.path import join
+from itertools import combinations 
 
 #ML
 import keras
@@ -22,22 +23,22 @@ from keras.layers.wrappers import TimeDistributed
 from keras.layers.recurrent import GRU
 from keras.layers.convolutional import Convolution1D
 
-##plot
-from IPython.display import clear_output, display
-import matplotlib.pylab as plt
-import seaborn as sns; sns.set()
-from matplotlib import colors
-from itertools import cycle
+# ##plot
+# from IPython.display import clear_output, display
+# import matplotlib.pylab as plt
+# import seaborn as sns; sns.set()
+# from matplotlib import colors
+# from itertools import cycle
 
-#chem
-import salty
-import gains as genetic
-from rdkit import Chem
-from rdkit.Chem.Fingerprints import FingerprintMols
-from rdkit import DataStructs
-from rdkit.Chem import Draw
-from rdkit.ML.Descriptors.MoleculeDescriptors import\
-    MolecularDescriptorCalculator as calculator
+# #chem
+# import salty
+# import gains as genetic
+# from rdkit import Chem
+# from rdkit.Chem.Fingerprints import FingerprintMols
+# from rdkit import DataStructs
+# from rdkit.Chem import Draw
+# from rdkit.ML.Descriptors.MoleculeDescriptors import\
+#     MolecularDescriptorCalculator as calculator
 
 class MoleculeVAE():
 
@@ -258,6 +259,25 @@ class MoleculeVAE():
     
     def load(self, charset, weights_file, latent_rep_size = 292):
         self.create(charset, weights_file = weights_file, latent_rep_size = latent_rep_size)
+
+
+class VAESaver(keras.callbacks.Callback):
+    """
+    custom callback to save vae models at 10 and 30 epochs
+    """
+    def on_epoch_end(self, epoch, logs={}):
+        if epoch == 10:  # or save after some epoch, each k-th epoch etc.
+            self.model.save("{}_{}.h5".format(self.model.name, epoch))
+        elif epoch == 30:  
+            self.model.save("{}_{}.h5".format(self.model.name, epoch))
+ 
+
+def rSubset(arr, r): 
+  
+    # return list of all subsets of length r 
+    # to deal with duplicate subsets use  
+    # set(list(combinations(arr, r))) 
+    return list(combinations(arr, r)) 
 
 
 def my_colors():
@@ -588,7 +608,7 @@ def return_top_cations(prop, n=10, return_min_values=True, T = [297, 316], P = [
                     print('salts sorted in ascending order and the maximum value of the top 10 unique cations was returned')
                     return salts, cations, max(values)
                 
-from rdkit.Chem import AllChem as Chem
+#from rdkit.Chem import AllChem as Chem
 
 def generate_solvent_vae(vae, char_to_index, smile_max_length, salts, model_ID=None, target=None, qspr=False, find=100, optimalCutOff=None,
                          greaterThanCutOff=True, md_model=None, path=None, desired_fitness=0.01, verbose=1, sanitize_cut_off=1e4):

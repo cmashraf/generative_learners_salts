@@ -30,7 +30,8 @@ class TwoMoleculeVAE():
                ani_max_length = 62,
                latent_rep_size = 292,
                weights_file = None,
-               qspr = False):
+               qspr = False,
+               qspr_outputs = 1):
         
         ### cation
         max_length = cat_max_length
@@ -99,7 +100,8 @@ class TwoMoleculeVAE():
                     cat_max_length,
                     len(cat_charset),
                     ani_max_length,
-                    len(ani_charset)
+                    len(ani_charset),
+                    qspr_outputs
                 )
             )
         else:
@@ -124,7 +126,8 @@ class TwoMoleculeVAE():
                 ani_z1,
                 latent_rep_size,
                 max_length,
-                charset_length
+                charset_length,
+                qspr_outputs
             )
         )
         if weights_file:
@@ -178,7 +181,8 @@ class TwoMoleculeVAE():
 
     def _buildAutoencoderQSPR(self, cat_z, ani_z, latent_rep_size, 
                           cat_max_length, cat_charset_length,
-                          ani_max_length, ani_charset_length):
+                          ani_max_length, ani_charset_length,
+                          qspr_outputs):
 
         h = Dense(latent_rep_size, name='cation_latent_input', activation = 'relu')(cat_z)
         h = RepeatVector(cat_max_length, name='cation_repeat_vector')(h)
@@ -202,7 +206,8 @@ class TwoMoleculeVAE():
         h = Dense(latent_rep_size*2, name='qspr_input', activation='relu')(combined)
         h = Dense(100, activation='relu', name='hl_1')(h)
         h = Dropout(0.5)(h)
-        smiles_qspr = Dense(1, activation='linear', name='qspr')(h)
+        
+        smiles_qspr = Dense(qspr_outputs, activation='linear', name='qspr')(h)
 
         return cat_smiles_decoded, ani_smiles_decoded, smiles_qspr
 
@@ -242,12 +247,12 @@ class TwoMoleculeVAE():
 
         return smiles_decoded
     
-    def _buildQSPR(self, cat_z, ani_z, latent_rep_size, max_length, charset_length):
+    def _buildQSPR(self, cat_z, ani_z, latent_rep_size, max_length, charset_length, qspr_outputs):
         combined = concatenate([cat_z, ani_z])
         h = Dense(latent_rep_size*2, name='qspr_input', activation='relu')(combined)
         h = Dense(100, activation='relu', name='hl_1')(h)
         h = Dropout(0.5)(h)
-        return Dense(1, activation='linear', name='qspr')(h)
+        return Dense(qspr_outputs, activation='linear', name='qspr')(h)
 
     def save(self, filename):
         self.autoencoder.save_weights(filename)
