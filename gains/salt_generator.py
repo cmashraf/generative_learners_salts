@@ -1,6 +1,8 @@
 from __future__ import absolute_import, division, print_function
 from os.path import join
 from keras.models import load_model
+import sys, os
+sys.path.append('../gains/')
 import engine as genetic
 from rdkit.Chem import AllChem as Chem
 from rdkit.ML.Descriptors.MoleculeDescriptors import\
