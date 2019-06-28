@@ -114,7 +114,7 @@ def decode_smiles(vae, smi, char_to_index, temp=0.5, smile_max_length=105):
     return string
 
 
-def decode_latent(vae, z, char_to_index, temp=0.5, smile_max_length=51):
+def decode_latent(decoder, z, char_to_index, temp=0.5, smile_max_length=51):
     """
     vae: variational autoencoder to encode/decode input
     z: encoded smiles str
@@ -123,40 +123,32 @@ def decode_latent(vae, z, char_to_index, temp=0.5, smile_max_length=51):
     char_list = list(char_to_index.keys())
     index_to_char = dict((i, c) for i, c in enumerate(char_list))
     string = ""
-    for i in vae.decoder.predict(z):
+    for i in decoder.predict(z):
         for j in i:
             index = sample(j, temperature=temp)
             string += index_to_char[index]
     return string
 
-
-def slerp(p0, p1, t):
-    """
-    return spherical linear interpolation coordinates between
-    points p0 and p1 at t intervals
-    """
-    omega = np.arccos(np.dot(p0/norm(p0), p1/norm(p1)))
-    so = np.sin(omega)
-    return np.sin((1.0-t)*omega) / so * p0 + np.sin(t*omega)/so * p1
-    
-
-def interpolate_structures(vae, ps, char_to_index, limit=1e4, write=False, temp=0.5):
+def interpolate_structures(decoder, ps, char_to_index, limit=1e4, write=False, temp=0.5,
+                          verbose=0):
     """
     Quick and Dirty: 
-    Use this VAE, these interpolations of embeded z's, and this char_to_index
+    Use this decoder, these interpolations of embeded z's, and this char_to_index
     dictionary to randomly generate structures at temp
     """
     rdkit_mols = []
     temps = []
     iterations = []
-    iteration = limit_counter = 0
     df = pd.DataFrame()
+    total_iterations = 0
     for p in ps:
+        iteration = limit_counter = 0
         while True:
+            total_iterations += 1
             iteration += 1
             limit_counter += 1
             t = temp
-            candidate = decode_latent(vae, p.reshape(1,292), char_to_index, temp=t)
+            candidate = decode_latent(decoder, p.reshape(1,292), char_to_index, temp=t)
             try:
                 sampled = Chem.MolFromSmiles(candidate)
                 cation = Chem.AddHs(sampled)
@@ -171,8 +163,13 @@ def interpolate_structures(vae, ps, char_to_index, limit=1e4, write=False, temp=
                     limit_counter = 0
                     df = pd.DataFrame([rdkit_mols,temps,iterations]).T
                     df.columns = ['smiles', 'temperature', 'iteration']
-                    print(df)
-                    print(t)
+                    if verbose == 0:
+                        clear_output(wait=True)
+                        print(df)
+                        print('total iterations:\t {}'.format(total_iterations))
+                    elif verbose == 1:
+                        clear_output(wait=True)
+                        print('total iterations:\t {}'.format(total_iterations))
                     break
             except:
                 pass
@@ -184,6 +181,16 @@ def interpolate_structures(vae, ps, char_to_index, limit=1e4, write=False, temp=
             pd.DataFrame.to_csv(df, path_or_buf='{}.csv'.format(write), index=False)
     return df
 
+
+def slerp(p0, p1, t):
+    """
+    return spherical linear interpolation coordinates between
+    points p0 and p1 at t intervals
+    """
+    omega = np.arccos(np.dot(p0/norm(p0), p1/norm(p1)))
+    so = np.sin(omega)
+    return np.sin((1.0-t)*omega) / so * p0 + np.sin(t*omega)/so * p1
+    
 
 def generate_structures(vae, smi, char_to_index, limit=1e4, write=False):
     """
@@ -224,6 +231,7 @@ def generate_structures(vae, smi, char_to_index, limit=1e4, write=False):
             df.columns = ['smiles', 'temperature', 'iteration']
             pd.DataFrame.to_csv(df, path_or_buf='{}.csv'.format(write), index=False)
     return df
+
 
 class suppress_rdkit_sanity(object):
     """
@@ -305,7 +313,7 @@ def get_fitness(anion, genes, target, models, deslists):
             deslist.iloc[1].values
         prediction = np.round(np.exp(model.predict(np.array(
                               features_normalized).reshape(1, -1))[0]),
-                              decimals=2)
+                              decimals=5)
         predictions.append(prediction[0])
     predictions = np.array(predictions)
     error = abs((predictions - target) / target)

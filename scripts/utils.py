@@ -129,8 +129,8 @@ def decode_latent(decoder, z, char_to_index, temp=0.5, smile_max_length=51):
             string += index_to_char[index]
     return string
 
-
-def interpolate_structures(decoder, ps, char_to_index, limit=1e4, write=False, temp=0.5):
+def interpolate_structures(decoder, ps, char_to_index, limit=1e4, write=False, temp=0.5,
+                          verbose=0):
     """
     Quick and Dirty: 
     Use this decoder, these interpolations of embeded z's, and this char_to_index
@@ -139,10 +139,12 @@ def interpolate_structures(decoder, ps, char_to_index, limit=1e4, write=False, t
     rdkit_mols = []
     temps = []
     iterations = []
-    iteration = limit_counter = 0
     df = pd.DataFrame()
+    total_iterations = 0
     for p in ps:
+        iteration = limit_counter = 0
         while True:
+            total_iterations += 1
             iteration += 1
             limit_counter += 1
             t = temp
@@ -161,8 +163,13 @@ def interpolate_structures(decoder, ps, char_to_index, limit=1e4, write=False, t
                     limit_counter = 0
                     df = pd.DataFrame([rdkit_mols,temps,iterations]).T
                     df.columns = ['smiles', 'temperature', 'iteration']
-                    print(df)
-                    print(t)
+                    if verbose == 0:
+                        clear_output(wait=True)
+                        print(df)
+                        print('total iterations:\t {}'.format(total_iterations))
+                    elif verbose == 1:
+                        clear_output(wait=True)
+                        print('total iterations:\t {}'.format(total_iterations))
                     break
             except:
                 pass
@@ -306,7 +313,7 @@ def get_fitness(anion, genes, target, models, deslists):
             deslist.iloc[1].values
         prediction = np.round(np.exp(model.predict(np.array(
                               features_normalized).reshape(1, -1))[0]),
-                              decimals=2)
+                              decimals=5)
         predictions.append(prediction[0])
     predictions = np.array(predictions)
     error = abs((predictions - target) / target)
