@@ -87,9 +87,9 @@ for subset in rSubset(['cpt', 'density', 'viscosity', 'thermal_conductivity'], 2
                           validation_data=([x_test_cat, x_test_ani], [x_test_cat, x_test_ani, y_test]),
                           epochs=epochs,
                           callbacks=[saver])
-#     gen3vae.save('../models/gen3vae_{}_{}.h5'.format(prop,epochs))
-#     with open('../models/history_gen3vae_{}_{}.json'.format(prop,epochs), 'w') as f:
-#         json.dump(history.history, f)
+    gen3vae.save('../models/{}_{}.h5'.format(gen3vae.autoencoder.name,epochs))
+    with open('../models/history_{}_{}.json'.format(gen3vae.autoencoder.name,epochs), 'w') as f:
+         json.dump(history.history, f)
 
 
 #######################
