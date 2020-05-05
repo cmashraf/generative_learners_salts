@@ -8,6 +8,7 @@ import keras
 #data
 import pandas as pd
 import numpy as np
+from numpy import array
 from numpy.linalg import norm
 import json
 import random
@@ -30,19 +31,7 @@ from rdkit.Chem import Draw
 from rdkit.ML.Descriptors.MoleculeDescriptors import\
     MolecularDescriptorCalculator as calculator
 
-class VAESaver(keras.callbacks.Callback):
-    """
-    custom callback to save vae models at 10 and 30 epochs
-    """
-    def on_epoch_end(self, epoch, logs={}):
-        if epoch == 10:  # or save after some epoch, each k-th epoch etc.
-            self.model.save("{}_{}.h5".format(self.model.name, epoch))
-        elif epoch == 30:  
-            self.model.save("{}_{}.h5".format(self.model.name, epoch))
-        elif epoch == 100:
-            self.model.save("{}_{}.h5".format(self.model.name, epoch))
-
-            
+           
 def rSubset(arr, r): 
   
     # return list of all subsets of length r 
@@ -163,11 +152,12 @@ def interpolate_structures(decoder, ps, char_to_index, limit=1e4, write=False, t
                     limit_counter = 0
                     df = pd.DataFrame([rdkit_mols,temps,iterations]).T
                     df.columns = ['smiles', 'temperature', 'iteration']
-                    if verbose == 0:
+                    if verbose == 1:
                         clear_output(wait=True)
+                        print('interpolating between structures...')
                         print(df)
                         print('total iterations:\t {}'.format(total_iterations))
-                    elif verbose == 1:
+                    elif verbose == 0:
                         clear_output(wait=True)
                         print('total iterations:\t {}'.format(total_iterations))
                     break
@@ -179,7 +169,7 @@ def interpolate_structures(decoder, ps, char_to_index, limit=1e4, write=False, t
             df = pd.DataFrame([rdkit_mols,temps,iterations]).T
             df.columns = ['smiles', 'temperature', 'iteration']
             pd.DataFrame.to_csv(df, path_or_buf='{}.csv'.format(write), index=False)
-    return df
+    return df, total_iterations
 
 
 def slerp(p0, p1, t):
@@ -381,10 +371,10 @@ def return_top_cations(prop, n=10, return_min_values=True, T = [297, 316], P = [
                 print('min/max values:\t{:.4f}, {:.4f}'.format(min(values), max(values)))
                 print('')
                 if return_min_values == True:
-                    print('salts sorted in descending order and the minimum value of the top 10 unique cations was returned')
+                    print('salts sorted in descending order and the minimum value of the top {} unique cations was returned'.format(n))
                     return salts, cations, min(values)
                 else:
-                    print('salts sorted in ascending order and the maximum value of the top 10 unique cations was returned')
+                    print('salts sorted in ascending order and the maximum value of the top {} unique cations was returned'.format(n))
                     return salts, cations, max(values)
                 
 from rdkit.Chem import AllChem as Chem
@@ -632,3 +622,304 @@ def generate_solvent_vae(vae, char_to_index, smile_max_length, salts, model_ID=N
                     print(pd.DataFrame(found_di).iloc[0])
                 print('{}/{} found'.format(found,find))
                 print('attempt {}'.format(attempts))
+                
+                
+from rdkit.Chem import AllChem as Chem
+
+def dual_search(vae, models, maximize_minimize, char_to_index, smile_max_length,
+                T=[297, 316], P=[99, 102], find=10, interpolative=False,
+                qspr=False, md_model=None, verbose=0, number_top_molecules=10,
+                check_anion_compatability=False):
+    """
+    search multi-qspr output latent space via interpolation of molecular seeds
+    
+    Parameters
+    ----------
+    vae: keras model
+        the variational autoencoder. must have designated cation decoder and encoder 
+        segments
+    models: list of salty models (2)
+        to create experimental dataset for first and second target properties
+    maximize_minimize: list of booleans
+        whether to maximize or minimize the target property values
+    char_to_index: dictionary
+        map SMILES characters to indeces
+    smile_max_length: int
+        maximum SMILE length
+    T: float
+        temperature range for experimental data
+    P: float
+        pressure range for experimental data
+    find: int
+        number of ILs to find
+    interpolative: boolean, default False
+        whether to interpolate between two experimental cations
+    qspr: boolean, default False
+        deprecated. Whether to include the vae-qspr estimate in the output
+    md_model: boolean, default None
+        deprecated. If true with return md supplemented rdkit qspr predictions
+    verbose: int, default 0
+        desired verbosity
+    number_top_molecules: int, default 10
+        determines target bounds and starting genepool. Top/bottom N candidates
+        returned depending on maximize_minimize setting
+    check_anion_compatability: boolean, default False
+        whether to check candidate against every anion in experimental dataset
+        
+    Returns
+    -------
+    found_di: pandas DataFrame
+        contains search results
+    """
+    print('')
+    model_1 = [models[0]]
+    salts_1, cations_1, target_1 = return_top_cations(model_1, n=number_top_molecules, 
+                                                      return_min_values=maximize_minimize[0])
+    print('')
+    model_2 = [models[1]]
+    salts_2, cations_2, target_2 = return_top_cations(model_2, n=number_top_molecules,
+                                                      return_min_values=maximize_minimize[1])
+    
+    salts = np.concatenate((salts_1, salts_2))
+    devmodel = salty.aggregate_data(models, T=T, P=P, merge='overlap')
+    devmodel.Data['smiles_string'] = devmodel.Data['smiles-cation'] \
+            + "." + devmodel.Data['smiles-anion']
+    combined_salts = devmodel.Data['smiles_string']
+    combined_salts = combined_salts.reset_index(drop=True)
+    combined_salts = combined_salts.unique()
+
+    combined_cations = [i.split('.')[0] for i in combined_salts]
+    combined_cations = pd.Series(combined_cations).unique()
+    combined_anions = [i.split('.')[1] for i in combined_salts]
+    combined_anions = pd.Series(combined_anions).unique()
+    
+    ### setup
+    char_list = list(char_to_index.keys())
+    index_to_char = dict((i, c) for i, c in enumerate(char_list))
+    found_di = {'salt': [],
+                    'cat seed': [],
+                 'ani seed': [],
+                 'temperature': [],
+                  'candidate': [],
+                  'attempts': []}
+    if model_1 is not None:
+        found_di.update(
+                {'rdkit qspr 1, {}'.format(models[0]): []})
+    if model_2 is not None:
+        found_di.update(
+                {'rdkit qspr 2, {}'.format(models[1]): []})
+    if md_model is not None:
+        found_di.update(
+                 {'rdkit-md qspr': []})
+    if qspr:
+        found_di.update(
+                 {'vae qspr': []})
+    if model_1 is not None:
+        for i, name in enumerate(model_1):
+            model_1 = np.array([genetic.load_data("{}_qspr.h5".format(name),
+                                                h5File=True)])
+            deslist_1 = list([genetic.load_data("{}_desc.csv".format(name))])
+            summary_1 = genetic.load_data("{}_summ.csv".format(name))
+
+    if model_2 is not None:
+        for i, name in enumerate(model_2):
+            model_2 = np.array([genetic.load_data("{}_qspr.h5".format(name),
+                                                h5File=True)])
+            deslist_2 = list([genetic.load_data("{}_desc.csv".format(name))])
+            summary = genetic.load_data("{}_summ.csv".format(name))
+    attempts = 0
+    found = 0
+    sanitize_attempts = 0
+    ### begin search
+    if interpolative == True:
+        total_iterations = 0
+        experimental_sample_iterations = 0 
+    while True:
+        previous_found = found
+        seed2 = salts[random.randint(0,len(salts)-1)].split('.')[1]
+        if check_anion_compatability:
+            anions_to_check = combined_anions
+        else:
+            anions_to_check = [seed2]
+        if interpolative == True:  
+            qspr_preds = []
+            experimental_sample_iterations += 1
+            #interpolate
+            cat1 = cations_1[random.randint(0,len(cations_1)-1)]
+            cat2 = cations_2[random.randint(0,len(cations_1)-1)]
+            values = [cat1, cat2]
+            zt = []
+            for smi in values:
+                zti = vae.cation_encoder.predict(one_hot(smi, char_to_index, smile_max_length=62))
+                zt.append(zti[0])
+            zt = np.array(zt)
+            # we can interpolate between these molecules...
+            ps = array([slerp(zt[0], zt[1], t) for t in np.arange(0.0, 1.0, 0.1)])
+            
+            temp = (max(0.2,random.random()))
+            df, interpolation_iterations = interpolate_structures(vae.cation_decoder, ps, char_to_index, 
+                                    limit=1e2, temp=temp, verbose=verbose)
+            total_iterations += interpolation_iterations 
+            # remove exp if ther eis 
+            
+            df = df[~df['smiles'].isin(combined_cations)]
+            df.reset_index(inplace=True)
+            
+#             found += df.shape[0]
+            if df.shape[0] == 0:
+                continue
+            
+        else:
+            ### non interpolative
+            attempts += 1
+            try:
+                seed1 = salts[random.randint(0,len(salts)-1)].split('.')[0]
+                for rindex, i in enumerate(vae.autoencoder.predict([one_hot(seed1, char_to_index, smile_max_length=62),
+                                                             one_hot(seed2, char_to_index, smile_max_length=62)])):
+                    string = ""
+                    if len(i.shape) > 2:
+                        i = i[0] #for qspr chemvae there is an extra dim
+                    if rindex == 0:
+                        temp=max(0.1,random.random()*2)
+                        for j in i:
+                            index = sample(j, temperature=temp)
+                            string += index_to_char[index]    
+                        sampled = Chem.MolFromSmiles(string)
+                        cation = Chem.AddHs(sampled)
+                        Chem.EmbedMolecule(cation, Chem.ETKDG())
+                        Chem.UFFOptimizeMolecule(cation)
+                        cation = Chem.RemoveHs(cation)
+                        candidate = Chem.MolToSmiles(cation)
+                if qspr:
+                    for rindex, i in enumerate(vae.autoencoder.predict([one_hot(candidate, char_to_index, smile_max_length=62),
+                                                         one_hot(anion_smi, char_to_index, smile_max_length=62)])[-1]):
+                        qspr_pred = np.exp(i[0][0]) #qspr is in last element of predict
+                    qspr_preds.append(qspr_pred)
+                    qspr_returns = pd.DataFrame(qspr_preds, columns=['qspr prediction'])
+                molseed = Chem.MolFromSmiles(seed1)
+                Chem.EmbedMolecule(molseed, Chem.ETKDG())
+                Chem.UFFOptimizeMolecule(molseed)
+                molseed = Chem.RemoveHs(molseed)
+                molseedsmi = Chem.MolToSmiles(molseed)
+                if molseedsmi == candidate:
+                    continue
+                df = pd.DataFrame(candidate, columns=['smiles'])
+            except:
+                sanitize_attempts += 1
+                if verbose == 0:
+                    clear_output(wait=True)
+                    print('sanitization failure {}'.format(sanitize_attempts))
+                continue 
+                
+        # check the property values
+        predictions = []
+        for candidate in df['smiles'][:]:
+            for anion_smi in anions_to_check:
+                anion = Chem.MolFromSmiles(anion_smi)
+                if model_1 is not None and target_1 is not None:
+                    with suppress_rdkit_sanity():
+                        scr, pre = get_fitness(anion, candidate, target_1, model_1,
+                                                    deslist_1)
+                    pre_1 = pre[0]
+                elif model_1 is not None: #we send a dummy variable to the fitness fn
+                    with suppress_rdkit_sanity():
+                        scr, pre = get_fitness(anion, candidate, 10, model_1,
+                                                    deslist_1)
+                    pre_1 = pre[0]
+
+                if model_2 is not None and target_2 is not None:
+                    with suppress_rdkit_sanity():
+                        scr, pre = get_fitness(anion, candidate, target_2, model_2,
+                                                    deslist_2)
+                    pre_2 = pre[0]
+
+                elif model_2 is not None: #we send a dummy variable to the fitness fn
+                    with suppress_rdkit_sanity():
+                        scr, pre = get_fitness(anion, candidate, 10, model_2,
+                                                    deslist_2)
+                    pre_2 = pre[0]
+                predictions.append([pre_1, pre_2, candidate, Chem.MolToSmiles(anion), total_iterations])    
+                if qspr:
+                    for rindex, i in enumerate(vae.autoencoder.predict([one_hot(candidate, char_to_index, smile_max_length=62),
+                                                         one_hot(anion_smi, char_to_index, smile_max_length=62)])[-1]):
+                        qspr_pred = np.exp(i[0][0]) #qspr is in last element of predict
+                    qspr_preds.append(qspr_pred)
+                    qspr_returns = pd.DataFrame(qspr_preds, columns=['qspr prediction'])
+        returns = pd.DataFrame(predictions, columns=[models[0], models[1], 'candidate', 'anion', 'iterations'])
+        
+        if verbose == 1:
+            clear_output(wait=True)
+            if returns.shape[0] > 1:
+                print(returns.iloc[-1])
+            elif returns.shape[0] == 1:
+                print(returns.iloc[0])
+            print('{}/{} found'.format(found,find))               
+            print('checking if target bounds satisfied...')
+       #### find if hit
+        a_hit = False
+        if maximize_minimize == [True, False]:
+            if returns.loc[(returns[models[0]] >= target_1) & (returns[models[1]] <= target_2)].shape[0] > 0:
+                returns = returns.loc[(returns[models[0]] >= target_1) & (returns[models[1]] <= target_2)]
+                a_hit = True
+        elif maximize_minimize == [True, True]:
+            if returns.loc[(returns[models[0]] >= target_1) & (returns[models[1]] >= target_2)].shape[0] > 0:
+                returns = returns.loc[(returns[models[0]] >= target_1) & (returns[models[1]] >= target_2)]
+                a_hit = True
+        elif maximize_minimize == [False, True]:
+            if returns.loc[(returns[models[0]] <= target_1) & (returns[models[1]] >= target_2)].shape[0] > 0:
+                returns = returns.loc[(returns[models[0]] <= target_1) & (returns[models[1]] >= target_2)]
+                a_hit = True
+        elif maximize_minimize == [False, False]:
+            if returns.loc[(returns[models[0]] <= target_1) & (returns[models[1]] <= target_2)].shape[0] > 0:
+                returns = returns.loc[(returns[models[0]] <= target_1) & (returns[models[1]] <= target_2)]
+                a_hit = True
+        returns.reset_index(inplace=True)
+        ## need to append multiple entries from df for intperolate
+        if a_hit:
+            for index, candidate in enumerate(returns['candidate']):
+                if candidate+'.'+returns['anion'][index] not in found_di['salt']:
+                    if qspr:
+                        if verbose == 0:
+                            print("vae qspr output:\t{}".format(qspr_pred))
+                        found_di['vae qspr'].append(qspr_returns['qspr prediction'][index])
+                    found_di['rdkit qspr 1, {}'.format(models[0])].append(returns[models[0]][index])
+                    found_di['rdkit qspr 2, {}'.format(models[1])].append(returns[models[1]][index])
+                    found_di['salt'].append(candidate+'.'+returns['anion'][index])
+                    # different clac depending on if interpolative
+                    if interpolative:
+                        found_di['cat seed'].append([cat1,cat2])
+                    else:
+                        found_di['cat seed'].append(seed1)
+                    found_di['ani seed'].append(returns['anion'][index])
+                    found_di['candidate'].append(candidate)
+                    found_di['attempts'].append(returns['iterations'][index])
+                    found_di['temperature'].append(temp)
+                    if verbose == 0:
+                        print("rdkit qspr 1 output:\t{}".format(returns[models[0]][index]))
+                        print("rdkit qspr 2 output:\t{}".format(returns[models[1]][index]))
+                        if interpolative:
+                            print(print("cat seed:\t{}, {}".format(cat1,cat2)))
+                        else:
+                            print("cat seed:\t{}".format(seed1))
+                        print("ani seed:\t{}".format(returns['anion'][index]))
+                        print("candidate:\t{}".format(candidate))
+                        print("attempts:\t{}".format(returns['iterations'][index]))
+                    if md_model is not None:
+                        if verbose == 0:
+                            print("rdkit-md qspr output:\t{}".format(pre_md))
+                        found_di['rdkit-md qspr'].append(pre_md)
+                    found += 1
+                    if previous_found < found: #did we find a soln this round
+                        if verbose == 1:
+                            clear_output(wait=True)
+                            if pd.DataFrame(found_di).shape[0] > 1:
+                                print(pd.DataFrame(found_di).iloc[-1])
+                            elif pd.DataFrame(found_di).shape[0] == 1:
+                                print(pd.DataFrame(found_di).iloc[0])
+                            print('{}/{} found'.format(found,find))
+                    if find <= found:
+                        return pd.DataFrame(found_di)
+        else:
+            if verbose == 0:
+                clear_output(wait=True)
+                print('candidate did not satisfy property conditions')

@@ -1,5 +1,5 @@
-*h5
+#*h5
 *GDB17*
-models/
+all_models/
 notebooks/development/
 scripts/development/
