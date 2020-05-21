@@ -1,5 +1,7 @@
 #*h5
-*GDB17*
+#*GDB17*
+data/GDB/
+data/latent_arrays/*GDB17*
 all_models/
 notebooks/development/
 scripts/development/
